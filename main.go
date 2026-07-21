@@ -62,7 +62,10 @@ func main() {
 			continue
 		}
 
-		go handleUDP(listener, req[:n], addr)
+		resp := handleReq(addr.IP.String(), req[:n])
+		if _, err := listener.WriteToUDP(resp, addr); err != nil {
+			fmt.Println(err)
+		}
 	}
 }
 
@@ -101,39 +104,42 @@ func handleHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Write(resp)
 }
 
-func handleUDP(listener *net.UDPConn, req []byte, addr *net.UDPAddr) {
-	resp := handleReq(addr.IP.String(), req)
-	if _, err := listener.WriteToUDP(resp, addr); err != nil {
-		fmt.Println(err)
-	}
-}
-
 func handleReq(ip string, req []byte) []byte {
-	defer func() {
-		if r := recover(); r != nil {
-			fmt.Printf("Recovered from panic: CLIENT=%s: %v\n", ip, r)
-		}
-	}()
-
 	// we assume that QDCOUNT=1 but i think that's reasonable
+
+	if len(req) < 12 {
+		return nil
+	}
 
 	// https://datatracker.ietf.org/doc/html/rfc1035#section-4.1.2
 	// TODO: we should probably handle compression but from what i know clients don't generally use it
 	labels := []string{}
 	offset := 12
 	for {
+		if offset >= len(req) {
+			return nil
+		}
 		length := int(req[offset])
 		offset++
 		if length == 0 || length > 63 {
 			break
 		}
+		if offset+length > len(req) {
+			return nil
+		}
 		labels = append(labels, string(req[offset:offset+length]))
 		offset += length
+	}
+	if offset > len(req) {
+		return nil
 	}
 	rawName := req[12:offset]
 	name := strings.ToLower(strings.Join(labels, "."))
 
 	// https://datatracker.ietf.org/doc/html/rfc1035#section-3.2.2
+	if offset+4 > len(req) {
+		return nil
+	}
 	questionType := binary.BigEndian.Uint16(req[offset:])
 	offset += 2
 	// https://datatracker.ietf.org/doc/html/rfc1035#section-3.2.4
