@@ -112,7 +112,7 @@ func handleReq(ip string, req []byte) []byte {
 	}
 
 	// https://datatracker.ietf.org/doc/html/rfc1035#section-4.1.2
-	// TODO: we should probably handle compression but from what i know clients don't generally use it
+	// TODO: we should probably handle compression but from what i gather clients generally don't use it
 	labels := []string{}
 	offset := 12
 	for {
